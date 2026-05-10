@@ -1,0 +1,59 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Compile LaTeX CV
+        run: |
+          chmod +x compile.sh
+          ./compile.sh
+
+      - name: Commit and Push PDF to Release Branch
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          git checkout --orphan temp_release
+          git rm -rf .
+          git checkout main -- cv.pdf
+          git add cv.pdf
+          git commit -m "Update CV PDF"
+          
+          git push -f origin temp_release:release
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          body: "Automated CV release"
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./cv.pdf
+          asset_name: cv.pdf
+          asset_content_type: application/pdf
